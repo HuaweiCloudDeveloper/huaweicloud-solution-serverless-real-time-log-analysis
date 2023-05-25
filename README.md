@@ -69,4 +69,3 @@ huaweicloud-solution-serverless-real-time-log-analysis
 	Figure 7 Viewing logs
 
 	![Viewing logs](./document/readme-image-007.png)
-
