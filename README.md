@@ -26,9 +26,6 @@ huaweicloud-solution-serverless-real-time-log-analysis
 ├──serverless-real-time-log-analysis.tf.json -- Resource orchestration template
 ├──functiongraph
 	├──serverless-real-time-log-analysis.py -- Function file
-
-
-
 ```
 **Getting Started**
 ---------------
