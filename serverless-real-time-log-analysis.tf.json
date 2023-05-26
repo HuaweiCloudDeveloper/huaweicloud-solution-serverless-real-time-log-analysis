@@ -1,0 +1,169 @@
+{
+    "terraform": {
+        "required_providers": [
+            {
+                "huaweicloud": {
+                    "source": "huawei.com/provider/huaweicloud",
+                    "version": ">=1.41.0"
+                }
+            }
+        ]
+    },
+    "provider": {
+        "huaweicloud": {
+            "cloud": "myhuaweicloud.com",
+            "endpoints": {
+                "iam": "iam.ap-southeast-3.myhuaweicloud.com",
+                "dns": "dns.ap-southeast-3.myhuaweicloud.com"
+            },
+            "insecure": true,
+            "region": "ap-southeast-3",
+            "auth_url": "https://iam.ap-southeast-3.myhuaweicloud.com/v3"
+        }
+    },
+    "variable": {
+        "function_name": {
+            "default": "serverless-real-time-log-analysis-demo",
+            "description": "Function name, which identifies a function and serves as the prefix of other resource names. It must be unique and can contain 2 to 53 characters, including letters, digits, underscores (_), and hyphens (-). The name must start with a letter. Default: serverless-real-time-log-analysis-demo ",
+            "type": "string",
+            "nullable": "false",
+            "validation": {
+                "condition": "${length(regexall(\"^[a-zA-Z][a-zA-Z0-9_-]{1,52}$\",var.function_name))>0}",
+                "error_message": "Invalid input. Please re-enter."
+            }
+        },
+        "lts_bucket_name": {
+            "default": "",
+            "description": "Name of an OBS bucket to upload alarm logs to. It must be unique and can contain 3 to 59 characters, including lowercase letters, digits, hyphens (-), and periods (.).Default: serverless-real-time-log-analysis-demo ",
+            "type": "string",
+            "nullable": "false",
+            "validation": {
+                "condition": "${length(regexall(\"^[a-z0-9\\\\.-]{3,59}$\",var.lts_bucket_name))>0}",
+                "error_message": "Invalid input. Please re-enter."
+            }
+        },
+        "lts_name": {
+            "default": "",
+            "description": "Log group and log stream prefix. It must be unique and can contain 1 to 64 characters, including letters, digits, hyphens (-), underscores (_), and periods (.). Do not start with a period or underscore, or end with a period.",
+            "type": "string",
+            "nullable": "false",
+            "validation": {
+                "condition": "${length(regexall(\"(^[a-zA-Z0-9-][a-zA-Z0-9\\\\._-]{0,62}[a-zA-Z0-9-_]$|^[a-zA-Z0-9-]$)\",var.lts_name))>0}",
+                "error_message": "Invalid input. Please re-enter."
+            }
+        },
+        "smn_name": {
+            "default": "serverless-real-time-log-analysis-demo",
+            "description": "Topic name, which cannot be modified once the topic is created. The name can contain 1 to 255 characters, including letters, digits, hyphens (-), and underscores (_), and must start with a letter or digit. Modifying this parameter will create a resource. Default: serverless-real-time-log-analysis-demo ",
+            "type": "string",
+            "nullable": "false",
+            "validation": {
+                "condition": "${length(regexall(\"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,254}$\",var.smn_name))>0}",
+                "error_message": "Invalid input. Please re-enter."
+            }
+        },
+        "email": {
+            "default": "",
+            "description": "Email address for receiving alarms. ",
+            "type": "string",
+            "nullable": "false",
+            "validation": {
+                "condition": "${length(regexall(\"^\\\\w+([-+.]\\\\w+)*@\\\\w+([-.]\\\\w+)*\\\\.\\\\w+([-.]\\\\w+)*$\",var.email))>0}",
+                "error_message": "Invalid input, please re-enter."
+            }
+        }
+    },
+    "resource": {
+        "huaweicloud_lts_group": {
+            "log_group": {
+                "group_name": "${var.lts_name}",
+                "ttl_in_days": 1
+            }
+        },
+        "huaweicloud_lts_stream": {
+            "log_stream": {
+                "group_id": "${huaweicloud_lts_group.log_group.id}",
+                "stream_name": "${var.lts_name}"
+            }
+        },
+        "huaweicloud_smn_topic": {
+            "topic": {
+                "name": "${var.smn_name}"
+            }
+        },
+        "huaweicloud_smn_subscription": {
+            "subscription": {
+                "topic_urn": "${huaweicloud_smn_topic.topic.id}",
+                "endpoint": "${var.email}",
+                "protocol": "email",
+                "remark": "o&m"
+            }
+        },
+        "huaweicloud_fgs_function": {
+            "fgs_function": {
+                "name": "${var.function_name}_fgs",
+                "app": "default",
+                "memory_size": 128,
+                "runtime": "Python3.9",
+                "timeout": 120,
+                "code_type": "obs",
+                "handler": "lts_app.handler",
+                "functiongraph_version": "v2",
+                "agency": "${huaweicloud_identity_agency.agency.name}",
+                "code_url": "https://log-qh.obs.ap-southeast-3.myhuaweicloud.com/serverless-real-time-log-analysis.zip",
+                "depend_list": [
+                    "6040030f-7242-4d60-a0d6-97389b673c1d"
+                ],
+                "user_data": "${jsonencode({\n  obs_address = \"obs.ap-southeast-3.myhuaweicloud.com\"\n  obs_store_bucket = huaweicloud_obs_bucket.log_bucket.bucket\n  smn_urn = huaweicloud_smn_topic.topic.topic_urn\n  })}"
+            }
+        },
+        "huaweicloud_fgs_trigger": {
+            "fgs_trigger": {
+                "depends_on": [
+                    "huaweicloud_fgs_function.fgs_function"
+                ],
+                "function_urn": "${huaweicloud_fgs_function.fgs_function.urn}",
+                "lts": [
+                    {
+                        "log_group_id": "${huaweicloud_lts_group.log_group.id}",
+                        "log_topic_id": "${huaweicloud_lts_stream.log_stream.id}"
+                    }
+                ],
+                "status": "ACTIVE",
+                "type": "LTS"
+            }
+        },
+        "huaweicloud_identity_agency": {
+            "agency": {
+                "delegated_service_name": "op_svc_cff",
+                "name": "${var.function_name}_agency",
+                "domain_roles": [
+                    "OBS Administrator"
+                ],
+                "project_role": [
+                    {
+                        "project": "ap-southeast-3",
+                        "roles": [
+                            "LTS FullAccess",
+                            "SMN FullAccess"
+                        ]
+                    },
+                    {
+                        "project": "MOS",
+                        "roles": [
+                            "OBS Administrator"
+                        ]
+                    }
+                ]
+            }
+        },
+        "huaweicloud_obs_bucket": {
+            "log_bucket": {
+                "acl": "private",
+                "bucket": "${var.lts_bucket_name}-log",
+                "force_destroy": true,
+                "multi_az": true
+            }
+        }
+    }
+}
